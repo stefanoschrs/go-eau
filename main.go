@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -26,19 +27,29 @@ type EauEntry struct {
 	Amount int   `json:"amount"`
 }
 
-const dataFileName string = ".eau"
+const (
+	dataFileName          string = ".eau"
+	defaultFilePermission        = 0644
+	initialIntake                = 3700
+)
 
 var dataFilePath string
 
-func initDataFile() {
+func init() {
 	// TODO: Support for Windows
 	home := os.Getenv("HOME")
 	dataFilePath = path.Join(home, dataFileName)
 
 	if _, err := os.Stat(dataFilePath); os.IsNotExist(err) {
-		// TODO: This doesn't look so pretty
-		data := []byte("{\"config\":{\"dailyIntake\":3700},\"entries\":[]}")
-		err := ioutil.WriteFile(dataFilePath, data, 0644)
+		data := DataFile{
+			EauConfig{
+				DailyIntake: initialIntake,
+			},
+			[]EauEntry{},
+		}
+		buf := bytes.Buffer{}
+		json.NewEncoder(&buf).Encode(data)
+		err := ioutil.WriteFile(dataFilePath, buf.Bytes(), defaultFilePermission)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -74,7 +85,7 @@ func addEntry(quantity int) {
 	})
 
 	newByteValue, _ := json.Marshal(dataFile)
-	ioutil.WriteFile(dataFilePath, newByteValue, 0644)
+	ioutil.WriteFile(dataFilePath, newByteValue, defaultFilePermission)
 
 	today := strings.Split(time.Now().String(), " ")[0]
 	fmt.Printf("[Eau] New entry added. %d/%d\n", getSum(dataFile.Entries, today), dataFile.Config.DailyIntake)
@@ -98,14 +109,12 @@ func printStatus() {
 }
 
 func main() {
-	initDataFile()
-
 	quantity := flag.Int("a", 0, "Add quantity in milliliters")
 	flag.Parse()
 
 	if *quantity > 0 {
 		addEntry(*quantity)
-		return
+		os.Exit(0)
 	}
 
 	printStatus()
